@@ -120,24 +120,34 @@ exports.getQueueStatus = (req, res) => {
       return res.status(400).json({ message: "Doctor ID and date are required" });
     }
 
-    const sql = `SELECT a.token_number, a.appointment_time, a.status, p.name, a.appointment_id, d.name as doctor_name
+    const sql = `SELECT a.token_number, a.appointment_time, a.status, p.name, a.patient_id, a.appointment_id, d.name as doctor_name, d.availability
                  FROM appointments a
                  JOIN patients p ON a.patient_id = p.patient_id
                  JOIN doctors d ON a.doctor_id = d.doctor_id
                  WHERE a.doctor_id=? AND a.appointment_date=? AND a.status IN ('scheduled', 'in_progress')
-                 ORDER BY a.token_number ASC`;
+           ORDER BY a.appointment_time ASC, a.token_number ASC`;
 
     db.query(sql, [doctor_id, appointment_date], (err, result) => {
       if (err) {
         return res.status(500).json({ message: "Error fetching queue", error: err.message });
       }
 
-      const doctorName = result.length > 0 ? result[0].doctor_name : 'Unknown Doctor';
+      let doctorName = 'Unknown Doctor';
+      let availability = '09:00-17:00'; // Default opening hours
+      
+      if (result.length > 0) {
+        doctorName = result[0].doctor_name;
+        availability = result[0].availability || '09:00-17:00';
+      }
+
+      // Extract opening time from availability (e.g., "09:00-17:00" -> "09:00")
+      const openingTime = availability.split('-')[0];
 
       res.json({
         doctor_id: doctor_id,
         doctor_name: doctorName,
         date: appointment_date,
+        opening_time: openingTime,
         queue_count: result.length,
         patients: result
       });

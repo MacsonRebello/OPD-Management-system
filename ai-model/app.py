@@ -16,7 +16,7 @@ class WaitingTimePredictor:
         self.model_trained = False
         self.training_data = []
         
-    def predict_waiting_time(self, patients_in_queue, avg_consultation_time, current_position):
+    def predict_waiting_time(self, patients_in_queue, avg_consultation_time, current_position, opening_time='09:00'):
         """
         Predict waiting time based on queue position and consultation time
         
@@ -24,14 +24,16 @@ class WaitingTimePredictor:
             patients_in_queue: Number of patients in queue
             avg_consultation_time: Average consultation time in minutes
             current_position: Current position in queue (1-based)
+            opening_time: Hospital opening time in HH:MM format
         
         Returns:
             Estimated waiting time in minutes
         """
         if current_position <= 1:
+            # First patient - waiting time is 0, will be called at opening time
             return 0
         
-        # Calculate waiting time
+        # Calculate waiting time based on patients ahead
         patients_ahead = current_position - 1
         estimated_wait = patients_ahead * avg_consultation_time
         
@@ -130,7 +132,8 @@ def predict_waiting_time():
     {
         "patients_in_queue": 10,
         "avg_consultation_time": 15,
-        "current_position": 5
+        "current_position": 5,
+        "opening_time": "09:00"
     }
     """
     try:
@@ -139,18 +142,31 @@ def predict_waiting_time():
         patients_in_queue = data.get('patients_in_queue', 0)
         avg_consultation_time = data.get('avg_consultation_time', 15)
         current_position = data.get('current_position', 1)
+        opening_time = data.get('opening_time', '09:00')
         
         waiting_time = predictor.predict_waiting_time(
             patients_in_queue,
             avg_consultation_time,
-            current_position
+            current_position,
+            opening_time
         )
+        
+        # Calculate predicted call time based on opening time
+        try:
+            open_hour, open_min = map(int, opening_time.split(':'))
+            opening_datetime = datetime.now().replace(hour=open_hour, minute=open_min, second=0, microsecond=0)
+        except:
+            opening_datetime = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+        
+        # Predicted time = opening time + waiting time
+        predicted_call_datetime = opening_datetime + timedelta(minutes=waiting_time)
+        predicted_time = predicted_call_datetime.strftime('%H:%M:%S')
         
         return jsonify({
             'status': 'success',
             'waiting_time_minutes': waiting_time,
-            'patients_ahead': current_position - 1,
-            'predicted_time': (datetime.now() + timedelta(minutes=waiting_time)).strftime('%H:%M:%S')
+            'patients_ahead': max(0, current_position - 1),
+            'predicted_time': predicted_time
         }), 200
     
     except Exception as e:

@@ -21,7 +21,6 @@ export default function QueueStatus() {
   const { user, token } = useAuthStore();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [doctorId, setDoctorId] = useState('');
-  const [doctorName, setDoctorName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [queueData, setQueueData] = useState<any>(null);
   const [waitingTime, setWaitingTime] = useState<WaitingTimeData | null>(null);
@@ -47,11 +46,6 @@ export default function QueueStatus() {
   const handleDoctorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedId = e.target.value;
     setDoctorId(selectedId);
-    
-    const selected = doctors.find(d => d.doctor_id.toString() === selectedId);
-    if (selected) {
-      setDoctorName(selected.name);
-    }
   };
 
   const handleCheckQueue = async () => {
@@ -65,11 +59,26 @@ export default function QueueStatus() {
       const response = await appointmentAPI.getQueueStatus(parseInt(doctorId), date);
       setQueueData(response.data);
 
-      // Call AI model to predict waiting time
+      const patients = response.data.patients || [];
+
+      // Find current patient's position in time-sorted queue (appointment_time ASC)
+      let patientPosition = 1;
+      const currentPatientId = Number(user?.id);
+      const patientIndex = patients.findIndex((p: any) => Number(p.patient_id) === currentPatientId);
+
+      if (patientIndex >= 0) {
+        patientPosition = patientIndex + 1;
+      }
+
+      // Extract opening time (e.g., "09:00")
+      const openingTime = response.data.opening_time || '09:00';
+
+      // Call AI model with proper position
       const aiResponse = await axios.post('http://localhost:5001/api/predict-waiting-time', {
         patients_in_queue: response.data.queue_count,
         avg_consultation_time: 15,
-        current_position: 1,
+        current_position: patientPosition,
+        opening_time: openingTime,
       });
 
       setWaitingTime(aiResponse.data);
